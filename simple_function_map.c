@@ -5,28 +5,32 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define any(buffer_ptr, end_ptr, predicate_block_ptr__p) ({ \
-    typeof(buffer_ptr) _p = buffer_ptr;            \
-    bool _run = _p != end_ptr;                     \
-    bool _some = false;                            \
-    while(_run) {                                  \
-        _some = predicate_block_ptr__p; _p++;      \
-        /* continue if case fail & more buffer */  \
-        _run = !_some & (_p < end_ptr);            \
-    }                                              \
-    _some; /* statement expression return */       \
+// False for size 0 buffer
+#define any(buffer_ptr, end_ptr, _any_ptr_predicate_block) ({ \
+    typeof(buffer_ptr) _any_ptr = (buffer_ptr);         \
+    const typeof(end_ptr) _e = (end_ptr);               \
+    bool _run = _any_ptr < _e;                          \
+    bool _result = false;                               \
+    while(_run) {                                       \
+        _result = _any_ptr_predicate_block; _any_ptr++; \
+        /* continue if case fail & more buffer */       \
+        _run = (!_result) & (_any_ptr < _e);            \
+    }                                                   \
+    _result; /* statement expression return */          \
 })
 
-#define all(buffer_ptr, end_ptr, predicate_block_ptr__p) ({ \
-    typeof(buffer_ptr) _p = buffer_ptr;            \
-    bool _run = _p != end_ptr;                     \
-    bool _some = false;                            \
-    while(_run) {                                  \
-        _some = predicate_block_ptr__p; _p++;      \
-        /* continue if case pass & more buffer */  \
-        _run = _some & (_p < end_ptr);             \
-    }                                              \
-    _some; /* statement expression return */       \
+// True for size 0 buffer
+#define all(buffer_ptr, end_ptr, _all_ptr_predicate_block) ({ \
+    typeof(buffer_ptr) _all_ptr = (buffer_ptr);         \
+    const typeof(end_ptr) const _e = (end_ptr);         \
+    bool _run = _all_ptr < _e;                          \
+    bool _result = true;                                \
+    while(_run) {                                       \
+        _result = _all_ptr_predicate_block; _all_ptr++; \
+        /* continue if case pass & more buffer */       \
+        _run = _result & (_all_ptr < _e);               \
+    }                                                   \
+    _result; /* statement expression return */          \
 })
 
 typedef uint32_t u32;
@@ -85,7 +89,7 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         // check adjacent
         u32 prev = x0;
         bool has_duplicate = any(first_ptr + 1, end_ptr, ({
-            u32 curr = _p->input;
+            u32 curr = _any_ptr->input;
             bool my_case = curr == prev;
             prev = curr;
             my_case;
