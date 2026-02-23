@@ -22,7 +22,7 @@
 // True for size 0 buffer
 #define all(buffer_ptr, end_ptr, _all_ptr_predicate_block) ({ \
     typeof(buffer_ptr) _all_ptr = (buffer_ptr);         \
-    const typeof(end_ptr) const _e = (end_ptr);         \
+    const typeof(end_ptr) _e = (end_ptr);               \
     bool _run = _all_ptr < _e;                          \
     bool _result = true;                                \
     while(_run) {                                       \
@@ -53,6 +53,13 @@ typedef struct {
 // Arithmetic Ops: +/-, -(negate), *
 // Bitwise    Ops: ~, |, &, ^, <<, >>, signed >>, right rotate
 
+// Function to calculate the determinant of a 3x3 matrix
+u32 determinant(u32 m[3][3]) {
+    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+           m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+           m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+}
+
 // Comparison function for integers
 int compare_KeyValues(const void *a, const void *b) {
     u32 arg1 = ((const KeyValue*)a)->input;
@@ -62,7 +69,12 @@ int compare_KeyValues(const void *a, const void *b) {
 }
 
 #define BUFFER_SIZE 100
-bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
+/* Finds simple expression equivalent to mapped values.
+ * Desgin is:
+ *  1. Calculate parameters for template expression based on first few values.
+ *  2. Check against ALL (including first few - helps prevent bad calculations from being 'confirmed')
+ */
+bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
     // Note that Overflow is a feature
 
     const size_t msize = mappings->size;
@@ -70,8 +82,8 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
     // 1. Size 0 No Relationship Exception
     if (msize == 0) return false;
 
-    const KeyValue * const first_ptr = &mappings->key_values[0];
-    const u32 y0 = first_ptr->output;
+    const KeyValue * const start_ptr = &mappings->key_values[0];
+    const u32 y0 = start_ptr->output;
 
     // 2. Size 1 - Constant Relationship
     if (msize == 1) {
@@ -79,16 +91,16 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         return true;
     }
 
-    const KeyValue * const end_ptr   = &first_ptr[msize];
-    const u32 x0 = first_ptr->input;
+    const KeyValue * const end_ptr = &start_ptr[msize];
+    const u32 x0 = start_ptr->input;
 
     // 3. Duplicate Inputs No Relationship Exception
     {
         // sort by input
-        qsort((void*)first_ptr, msize, sizeof(KeyValue), compare_KeyValues);
+        qsort((void*)start_ptr, msize, sizeof(KeyValue), compare_KeyValues);
         // check adjacent
         u32 prev = x0;
-        bool has_duplicate = any(first_ptr + 1, end_ptr, ({
+        bool has_duplicate = any(start_ptr + 1, end_ptr, ({
             u32 curr = _any_ptr->input;
             bool my_case = curr == prev;
             prev = curr;
@@ -97,26 +109,23 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         if (has_duplicate) return false;
     }
 
-    // 3. Test Constant Relationship
+    // 4. Test Constant Relationship
     {
-        const KeyValue *current = first_ptr;
-        while (++current != end_ptr && current->output == y0);
-
-        // no short circuit -> means all cases passed
-        if (current == end_ptr) {
+        bool const_relation = all(start_ptr + 1, end_ptr, ({ _all_ptr->output == y0; }));
+        if (const_relation) {
             sprintf(buffer, "y = %u", y0);
             return true;
         }
     }
 
-    // 4. Test Single Op Relationship
+    // 5. Test Single Op Relationship TODO
     // Arithmetic Ops: +/-, -(negate), *
     // Bitwise    Ops: ~, |, &, ^, <<, >>, signed >>, right rotate
     for (int a = 0; a < 32; a++) {
         bool rshift = true, lshift = true, rshift_v = true, lshift_v = true;
         for (size_t i = 0; i < mappings->size; i++) {
-            u32 x = first_ptr[i].input;
-            u32 y = first_ptr[i].output;
+            u32 x = start_ptr[i].input;
+            u32 y = start_ptr[i].output;
             if ((x >> a) != y) rshift = false;
             if ((x << a) != y) lshift = false;
             if (x < 32 && (a >> x) != y) rshift_v = false; else if (x >= 32) rshift_v = false;
@@ -128,39 +137,38 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         if (lshift_v) { sprintf(buffer, "y = %d << x", a); return true; }
     }
 
-    // 2. Linear: y = mx + b
+    // 6. Linear: y = mx + b TODO
     if (msize >= 2) { // always works for 2 items
-        u32 x1 = first_ptr[1].input;
-        u32 y1 = first_ptr[1].output;
-        if (x1 != x0) {
-            i32 m = ((i32)y1 - (i32)y0) / ((i32)x1 - (i32)x0);
-            i32 b = (i32)y0 - (m * (i32)x0);
+        u32 x1 = start_ptr[1].input;
+        u32 y1 = start_ptr[1].output;
 
-            // Check rest
-            const KeyValue *current = first_ptr + 2;
-            u32 x, y;
-            do {
-                u32 x = current->input;
-                u32 y = current->output;
-            } while ((u32)(m * x + b) == y && ++current != end_ptr);
+        i32 m = ((i32)y1 - (i32)y0) / ((i32)x1 - (i32)x0);
+        i32 b = (i32)y0 - (m * (i32)x0);
 
-            if (current == end_ptr) {
-                u32 m_abs = abs(m);
-                if ((m_abs & (m_abs - 1)) == 0) {
-                    u32 shift = 0;
-                    u32 copy_m_abs = m_abs;
-                    while (copy_m_abs >>= 1) shift++;
+        // Check rest
+        const KeyValue *current = start_ptr + 2;
+        u32 x, y;
+        do {
+            u32 x = current->input;
+            u32 y = current->output;
+        } while ((u32)(m * x + b) == y && ++current != end_ptr);
 
-                    sprintf(buffer, "y = (%sx << %u) %s %u", m < 0 ? "-" : 0 , shift, b >= 0 ? "+" : "-", (u32)(b < 0 ? -b : b));
-                } else {
-                    sprintf(buffer, "y = %ld*x %s %u", (long)m, b >= 0 ? "+" : "-", (u32)(b < 0 ? -b : b));
-                }
-                return true;
+        if (current == end_ptr) {
+            u32 m_abs = abs(m);
+            if ((m_abs & (m_abs - 1)) == 0) {
+                u32 shift = 0;
+                u32 copy_m_abs = m_abs;
+                while (copy_m_abs >>= 1) shift++;
+
+                sprintf(buffer, "y = (%sx << %u) %s %u", m < 0 ? "-" : 0 , shift, b >= 0 ? "+" : "-", (u32)(b < 0 ? -b : b));
+            } else {
+                sprintf(buffer, "y = %ld*x %s %u", (long)m, b >= 0 ? "+" : "-", (u32)(b < 0 ? -b : b));
             }
+            return true;
         }
     }
 
-    // 3. Exponential: y = (A << (B*x)) + C
+    // 7. Exponential: y = (A << (B*x)) + C
     // To solve for 3 unknowns, we check a few small possibilities for A and B
     for (u32 b = 1; b <= 32; b++) { // 204,800 a b combos
         for (u32 ae = 0; ae <= 24; ae += 8) { // A exponent
@@ -171,15 +179,9 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
             u32 c = y0 - (a << (b * x0));
 
             // Check rest
-            const KeyValue *current = first_ptr + 1;
-            u32 x, y;
-            do {
-                x = current->input;
-                y = current->output;
-            }  while ((a << (b * x)) + c == y && ++current != end_ptr);
+            bool rest_passed = all(start_ptr + 1, end_ptr, ({ ((a << (b * _all_ptr->input)) + c == _all_ptr->output); }));
 
-            // Pass if loop broke early on failed item
-            if (current == end_ptr) {
+            if (rest_passed) {
                 char b_str[16] = "", c_paran[2] = "", c_str[16] = "";
                 // b is power of 2?
                 if (b == 1) {
@@ -203,17 +205,51 @@ bool find_expression(char buffer[BUFFER_SIZE], const Mappings *mappings) {
     }
     }
 
-    // 4. Quadratic: y = ax^2 + bx + c (Simplified check)
-    if (mappings->size >= 3) {
-        // Solving via basic finite differences or Cramer's would go here
-        // For brevity, checking simple y = x*x
-        bool sq = true;
-        for (size_t i = 0; i < msize; i++) {
-            if (first_ptr[i].input * first_ptr[i].input != first_ptr[i].output) {
-                sq = false; break;
-            }
+    // 8. Quadratic: y = ax^2 + bx + c
+    {
+        u32 x1, y1, x2, y2; {
+            const KeyValue *temp1 = start_ptr + 1;
+            x1 = temp1->input;
+            y1 = temp1->output;
+            const KeyValue *temp2 = start_ptr + 2;
+            x2 = temp2->input;
+            y2 = temp2->output;
         }
-        if (sq) { strcpy_s(buffer, BUFFER_SIZE, "y = x * x"); return true; }
+
+        // Matrix M based on ax^2 + bx + c = y
+        u32 M[3][3] = {
+            {x0 * x0, x0, 1},
+            {x1 * x1, x1, 1},
+            {x2 * x2, x2, 1}
+        };
+
+        u32 detM = determinant(M);
+
+        // detM = 0 if points are collinear or share x-coordinates - no unique parabola would exist
+        if (detM != 0) {
+            // Matrices for a, b, and c (replacing columns with y-values)
+            u32 Ma[3][3] = {{y0     , x0,  1}, {y1     , x1,  1}, {y2     , x2,  1}};
+            u32 Mb[3][3] = {{x0 * x0, y0,  1}, {x1 * x1, y1,  1}, {x2 * x2, y2,  1}};
+            u32 Mc[3][3] = {{x0 * x0, x0, y0}, {x1 * x1, x1, y1}, {x2 * x2, x2, y2}};
+
+            u32 a = determinant(Ma) / detM;
+            u32 b = determinant(Mb) / detM;
+            u32 c = determinant(Mc) / detM;
+
+            // Check
+            bool check_pass = all(start_ptr + 0, end_ptr, ({
+                u32 x = _all_ptr->input;
+                u32 y = _all_ptr->output;
+                ((a * x * x + b * x + c) == y);
+             }));
+
+            char a_str[16] = "", b_str[16] = "", c_str[16] ="";
+            if (a != 0) sprintf(a_str, "%u * ", a);
+            if (b != 0) sprintf(b_str, "%u * ", b);
+            if (c != 0) sprintf(c_str, " + %u", a);
+
+            sprintf(buffer, "y = %sx * x + %sx%s", a_str, b_str, c_str);
+        }
     }
 
     return false;
@@ -263,11 +299,10 @@ int main() {
     char buffer[100];
     printf("\nSearching for expression...\n");
 
-    // Call find_expression using the new Mappings pointer
-    if (find_expression(buffer, &mappings)) {
+    if (map_2_simple_expr(buffer, &mappings)) {
         printf("\n=== FOUND! ===\n");
         printf("Result: %s\n", buffer);
-        
+
         if (strstr(buffer, "ROR")) {
             printf("\nNOTE: Add this to your code for ROR:\n");
             printf("#define ROR(x, r) (((x) >> ((r) & 31)) | ((x) << (32 - ((r) & 31))))\n");
