@@ -38,6 +38,7 @@ int compare_KeyValues(const void *a, const void *b) {
  * Desgin is:
  *  1. Calculate parameters for template expression based on first few values.
  *  2. Check against ALL (including first few - helps prevent bad calculations from being 'confirmed')
+ *  3. On error return false + error message
  */
 bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
     // Note that Overflow is a feature
@@ -45,7 +46,10 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
     const size_t msize = mappings->size;
 
     // 1. Size 0 No Relationship Exception
-    if (msize == 0) return false;
+    if (msize == 0) {
+        sprintf(buffer, "No mappings provided.");
+        return false;
+    }
 
     const KeyValue * const start_ptr = &mappings->key_values[0];
     const u32 y0 = start_ptr->output;
@@ -65,18 +69,21 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         qsort((void*)start_ptr, msize, sizeof(KeyValue), compare_KeyValues);
         // check adjacent
         u32 prev = x0;
-        bool has_duplicate = any(start_ptr + 1, end_ptr, ({
+        bool has_duplicate = any(&start_ptr[1], end_ptr, ({
             u32 curr = _any_ptr->input;
             bool my_case = curr == prev;
             prev = curr;
             my_case;
         }));
-        if (has_duplicate) return false;
+        if (has_duplicate) {
+            sprintf(buffer, "Mappings included duplicate inputs.");
+            return false;
+        }
     }
 
     // 4. Test Constant Relationship
     {
-        bool const_relation = all(start_ptr + 1, end_ptr, ({ _all_ptr->output == y0; }));
+        bool const_relation = all(&start_ptr[1], end_ptr, ({ _all_ptr->output == y0; }));
         if (const_relation) {
             sprintf(buffer, "y = %u", y0);
             return true;
@@ -102,32 +109,26 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         if (lshift_v) { sprintf(buffer, "y = %d << x", a); return true; }
     }
 
-    // 6. Linear: y = mx + b TODO
+    // 6. Linear: y = mx + b
     if (msize >= 2) { // always works for 2 items
         u32 x1 = start_ptr[1].input;
         u32 y1 = start_ptr[1].output;
 
-        i32 m = ((i32)y1 - (i32)y0) / ((i32)x1 - (i32)x0);
-        i32 b = (i32)y0 - (m * (i32)x0);
+        u32 m = ((i64)y1 - (i64)y0) / ((i64)x1 - (i64)x0);
+        u32 b = y0 - (m * x0);
 
         // Check rest
-        const KeyValue *current = start_ptr + 2;
-        u32 x, y;
-        do {
-            u32 x = current->input;
-            u32 y = current->output;
-        } while ((u32)(m * x + b) == y && ++current != end_ptr);
+        bool all_passed = all(start_ptr, end_ptr, ({
+            ((m * (i64)(_all_ptr->input) + b) == _all_ptr->output);
+        }));
 
-        if (current == end_ptr) {
-            u32 m_abs = abs(m);
-            if ((m_abs & (m_abs - 1)) == 0) {
-                u32 shift = 0;
-                u32 copy_m_abs = m_abs;
-                while (copy_m_abs >>= 1) shift++;
-
-                sprintf(buffer, "y = (%sx << %u) %s %u", m < 0 ? "-" : 0 , shift, b >= 0 ? "+" : "-", (u32)(b < 0 ? -b : b));
+        if (all_passed) {
+            u32 m_abs = abs((i32)m); // pretend m is i32 for << optimization
+            if (is_power_2(m_abs)) {
+                u32 shift = log2_pure_power(m_abs);
+                sprintf(buffer, "y = %u %c (x << %u)", b, m < 0 ? '-' : '+', shift);
             } else {
-                sprintf(buffer, "y = %ld*x %s %u", (long)m, b >= 0 ? "+" : "-", (u32)(b < 0 ? -b : b));
+                sprintf(buffer, "y = %u*x + %u", m, b);
             }
             return true;
         }
@@ -135,25 +136,23 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
 
     // 7. Exponential: y = (A << (B*x)) + C
     // To solve for 3 unknowns, we check a few small possibilities for A and B
-    for (u32 b = 1; b <= 32; b++) { // 204,800 a b combos
-        for (u32 ae = 0; ae <= 24; ae += 8) { // A exponent
-        for (u32 am = 1; am <= 255; am++) {   // A mantissa
-            u32 a = am << ae; // 25*256 = 6,400 a combos
+    for (u32 b = 1; b <= 32; b++) {
+        for (u32 ae = 0; ae <= 24; ae += 1) { // A exponent
+        for (u32 am = (ae == 0) ? 1 : 127; am <= 255; am++) { // A mantissa
+            u32 a = am << ae;
 
             // Calculate C using the first mapping: y0 = (a << (b * x0)) + c
             u32 c = y0 - (a << (b * x0));
 
             // Check rest
-            bool rest_passed = all(start_ptr + 1, end_ptr, ({ ((a << (b * _all_ptr->input)) + c == _all_ptr->output); }));
+            bool rest_passed = all(start_ptr, end_ptr, ({ ((a << (b * _all_ptr->input)) + c == _all_ptr->output); }));
 
             if (rest_passed) {
                 char b_str[16] = "", c_paran[2] = "", c_str[16] = "";
-                // b is power of 2?
                 if (b == 1) {
                     strcpy_s(b_str, sizeof(b_str), "x");
-                } else if ((b & (b - 1)) == 0) {
-                    u32 shift = 0;
-                    while (b >>= 1) shift++;
+                } else if (is_power_2(b)) {
+                    u32 shift = log2_pure_power(b);
                     sprintf(b_str, "(x << %u)", shift);
                 } else {
                     sprintf(b_str, "(%u * x)", b);
@@ -173,10 +172,10 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
     // 8. Quadratic: y = ax^2 + bx + c
     {
         u32 x1, y1, x2, y2; {
-            const KeyValue *temp1 = start_ptr + 1;
+            const KeyValue *temp1 = &start_ptr[1];
             x1 = temp1->input;
             y1 = temp1->output;
-            const KeyValue *temp2 = start_ptr + 2;
+            const KeyValue *temp2 = &start_ptr[2];
             x2 = temp2->input;
             y2 = temp2->output;
         }
@@ -202,7 +201,7 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
             u32 c = determinant(Mc) / detM;
 
             // Check
-            bool check_pass = all(start_ptr + 0, end_ptr, ({
+            bool check_pass = all(start_ptr, end_ptr, ({
                 u32 x = _all_ptr->input;
                 u32 y = _all_ptr->output;
                 ((a * x * x + b * x + c) == y);
@@ -217,6 +216,7 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         }
     }
 
+    sprintf(buffer, "Failed to find mapping expression.");
     return false;
 }
 

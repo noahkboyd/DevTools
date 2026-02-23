@@ -23,6 +23,10 @@ typedef  int64_t i64;
     #define ROTR32(x, n) ((x >> n) | (x << (32 -  n)))
 #endif
 
+#define is_power2(x) ((x != 0) && ((x & (x - 1)) == 0))
+#define log2_pure_power(x) ({ u32 _p = 0; typeof(x) _y = x; while (_y >>= 1) {_p++;} _p; })
+#define highest_bit_index(x) ({ log2_pure_power(x); })
+
 // False for size 0 buffer
 #define any(buffer_ptr, end_ptr, _any_ptr_predicate_block) ({ \
     typeof(buffer_ptr) _any_ptr = (buffer_ptr);         \
