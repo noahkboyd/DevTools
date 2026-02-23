@@ -5,38 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-// False for size 0 buffer
-#define any(buffer_ptr, end_ptr, _any_ptr_predicate_block) ({ \
-    typeof(buffer_ptr) _any_ptr = (buffer_ptr);         \
-    const typeof(end_ptr) _e = (end_ptr);               \
-    bool _run = _any_ptr < _e;                          \
-    bool _result = false;                               \
-    while(_run) {                                       \
-        _result = _any_ptr_predicate_block; _any_ptr++; \
-        /* continue if case fail & more buffer */       \
-        _run = (!_result) & (_any_ptr < _e);            \
-    }                                                   \
-    _result; /* statement expression return */          \
-})
-
-// True for size 0 buffer
-#define all(buffer_ptr, end_ptr, _all_ptr_predicate_block) ({ \
-    typeof(buffer_ptr) _all_ptr = (buffer_ptr);         \
-    const typeof(end_ptr) _e = (end_ptr);               \
-    bool _run = _all_ptr < _e;                          \
-    bool _result = true;                                \
-    while(_run) {                                       \
-        _result = _all_ptr_predicate_block; _all_ptr++; \
-        /* continue if case pass & more buffer */       \
-        _run = _result & (_all_ptr < _e);               \
-    }                                                   \
-    _result; /* statement expression return */          \
-})
-
-typedef uint32_t u32;
-typedef  int32_t i32;
-typedef uint64_t u64;
-typedef  int64_t i64;
+#include "common.h"
 
 typedef struct {
     u32 input, output;
@@ -46,8 +15,6 @@ typedef struct {
     KeyValue *key_values;
     size_t size;
 } Mappings;
-
-#define ROTR(x_u32, pos_shift) ((x_u32 >> pos_shift) | (x_u32 << (32 -  pos_shift)))
 
 // Ops:,
 // Arithmetic Ops: +/-, -(negate), *
@@ -62,10 +29,8 @@ u32 determinant(u32 m[3][3]) {
 
 // Comparison function for integers
 int compare_KeyValues(const void *a, const void *b) {
-    u32 arg1 = ((const KeyValue*)a)->input;
-    u32 arg2 = ((const KeyValue*)b)->input;
-    // pos: arg1 greater, 0: equal, neg: arg2 greater
-    return arg1 - arg2;
+    // pos: a greater, 0: equal, neg: b greater
+    return ((const KeyValue*)a)->input - ((const KeyValue*)b)->input;
 }
 
 #define BUFFER_SIZE 100
