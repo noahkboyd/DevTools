@@ -16,7 +16,7 @@ typedef struct {
     size_t size;
 } Mappings;
 
-// Ops:,
+// Ops:
 // Arithmetic Ops: +/-, -(negate), *
 // Bitwise    Ops: ~, |, &, ^, <<, >>, signed >>, right rotate
 
