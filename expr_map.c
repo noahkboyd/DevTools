@@ -118,13 +118,13 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
         u32 b = y0 - (m * x0);
 
         // Check rest
-        bool all_passed = all(start_ptr, end_ptr, ({
+        bool all_passed = all((const KeyValue * )start_ptr, end_ptr, ({
             ((m * (i64)(_all_ptr->input) + b) == _all_ptr->output);
         }));
 
         if (all_passed) {
             u32 m_abs = abs((i32)m); // pretend m is i32 for << optimization
-            if (is_power_2(m_abs)) {
+            if (is_power2(m_abs)) {
                 u32 shift = log2_pure_power(m_abs);
                 sprintf(buffer, "y = %u %c (x << %u)", b, m < 0 ? '-' : '+', shift);
             } else {
@@ -145,13 +145,13 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
             u32 c = y0 - (a << (b * x0));
 
             // Check rest
-            bool rest_passed = all(start_ptr, end_ptr, ({ ((a << (b * _all_ptr->input)) + c == _all_ptr->output); }));
+            bool rest_passed = all((const KeyValue * )start_ptr, end_ptr, ({ ((a << (b * _all_ptr->input)) + c == _all_ptr->output); }));
 
             if (rest_passed) {
                 char b_str[16] = "", c_paran[2] = "", c_str[16] = "";
                 if (b == 1) {
                     strcpy_s(b_str, sizeof(b_str), "x");
-                } else if (is_power_2(b)) {
+                } else if (is_power2(b)) {
                     u32 shift = log2_pure_power(b);
                     sprintf(b_str, "(x << %u)", shift);
                 } else {
@@ -201,7 +201,7 @@ bool map_2_simple_expr(char buffer[BUFFER_SIZE], const Mappings *mappings) {
             u32 c = determinant(Mc) / detM;
 
             // Check
-            bool check_pass = all(start_ptr, end_ptr, ({
+            bool check_pass = all((const KeyValue * )start_ptr, end_ptr, ({
                 u32 x = _all_ptr->input;
                 u32 y = _all_ptr->output;
                 ((a * x * x + b * x + c) == y);
