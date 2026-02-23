@@ -31,8 +31,8 @@ typedef  int64_t i64;
 #define any(buffer_ptr, end_ptr, _any_ptr_predicate_block) ({ \
     typeof(buffer_ptr) _any_ptr = (buffer_ptr);         \
     const typeof(end_ptr) _e = (end_ptr);               \
-    _Bool _run = _any_ptr < _e;                          \
-    _Bool _result = false;                               \
+    _Bool _run = _any_ptr < _e;                         \
+    _Bool _result = false;                              \
     while(_run) {                                       \
         _result = _any_ptr_predicate_block; _any_ptr++; \
         /* continue if case fail & more buffer */       \
@@ -45,8 +45,8 @@ typedef  int64_t i64;
 #define all(buffer_ptr, end_ptr, _all_ptr_predicate_block) ({ \
     typeof(buffer_ptr) _all_ptr = (buffer_ptr);         \
     const typeof(end_ptr) _e = (end_ptr);               \
-    _Bool _run = _all_ptr < _e;                          \
-    _Bool _result = true;                                \
+    _Bool _run = _all_ptr < _e;                         \
+    _Bool _result = true;                               \
     while(_run) {                                       \
         _result = _all_ptr_predicate_block; _all_ptr++; \
         /* continue if case pass & more buffer */       \
@@ -54,3 +54,17 @@ typedef  int64_t i64;
     }                                                   \
     _result; /* statement expression return */          \
 })
+
+u32 parse_flexible_int(const char *str) {
+    // Handle Binary (0b...)
+    if (strncmp(str, "0b", 2) == 0 || strncmp(str, "0B", 2) == 0) {
+        return strtoul(str + 2, NULL, 2);
+    }
+    // Handle Octal (0o...)
+    if (strncmp(str, "0o", 2) == 0 || strncmp(str, "0O", 2) == 0) {
+        return strtoul(str + 2, NULL, 8);
+    }
+    // Handle Hex (0x...) and Decimal (default)
+    // Passing '0' as the base tells strtoul to auto-detect 0x and leading zeros for octal
+    return strtoul(str, NULL, 0);
+}

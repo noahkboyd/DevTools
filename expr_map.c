@@ -249,31 +249,39 @@ int main() {
     }
 
     // Read mappings
+    printf("Enter mappings as: key value\nAccepts 0x, 0b, 0o, and decimal.\n");
     for (u32 i = 0; i < nmap; i++) {
+        char str_in[70], str_out[70];
         u32 in, out;
-        printf("  Mapping %d (input output in hex): ", i + 1);
-        if (scanf_s("%x %x", &in, &out) != 2) {
+
+        printf("  Mapping %d: ", i + 1);
+
+        // Read the inputs as strings first
+        if (scanf_s("%69s %69s", str_in, sizeof(str_in), str_out, sizeof(str_out)) != 2) {
             fprintf(stderr, "Invalid input format.\n");
             free(mappings.key_values);
             return 1;
         }
+
+        // Convert strings to integers using custom base detection
+        in = (u32)parse_flexible_int(str_in);
+        out = (u32)parse_flexible_int(str_out);
+
         mappings.key_values[i].input = in;
         mappings.key_values[i].output = out;
     }
 
     char buffer[100];
-    printf("\nSearching for expression...\n");
 
     if (map_2_simple_expr(buffer, &mappings)) {
-        printf("\n=== FOUND! ===\n");
-        printf("Result: %s\n", buffer);
+        printf("\nFound: %s\n", buffer);
 
         if (strstr(buffer, "ROR")) {
             printf("\nNOTE: Add this to your code for ROR:\n");
             printf("#define ROR(x, r) (((x) >> ((r) & 31)) | ((x) << (32 - ((r) & 31))))\n");
         }
     } else {
-        printf("\nNo matching expression found.\n");
+        printf("\nNothing Found: %s\n", buffer);
     }
 
     // Cleanup
